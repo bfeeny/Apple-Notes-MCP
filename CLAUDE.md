@@ -1,79 +1,83 @@
-# Apple-Notes-MCP
-
-A Model Context Protocol (MCP) server that provides read/write access to Apple Notes via AppleScript.
+# Apple Notes MCP Server
 
 ## Project Overview
+An MCP (Model Context Protocol) server that bridges Claude to Apple Notes via AppleScript, executed through Node.js `child_process.exec` calling `osascript`. There is no Apple Notes REST API — AppleScript is the only reliable automation path on macOS.
 
-This is a TypeScript MCP server that exposes Apple Notes functionality as MCP tools. It uses `osascript` to execute AppleScript commands that interact with the Apple Notes application on macOS.
+## Architecture
+```
+MCP Client (Claude)
+       │
+       ▼
+MCP Server (Node.js / TypeScript)
+  ├── Tool Handlers (src/tools/)
+  ├── AppleScript Runner (src/applescript/runner.ts) ──► osascript ──► Apple Notes.app
+  └── Response Formatter (src/utils/)
+```
 
 ## Tech Stack
-
-- **Language**: TypeScript
-- **Runtime**: Node.js (>=18)
-- **MCP SDK**: `@modelcontextprotocol/sdk`
-- **Transport**: stdio (standard MCP transport)
-- **Apple Notes Access**: AppleScript via `child_process.execFile("osascript", ...)`
+- **Runtime:** Node.js + TypeScript
+- **MCP SDK:** `@modelcontextprotocol/sdk`
+- **AppleScript execution:** `child_process.exec('osascript -e ...')`
+- **No external dependencies** beyond the MCP SDK
 
 ## Project Structure
-
 ```
-.
-├── CLAUDE.md          # This file - project context for Claude
-├── README.md          # User-facing documentation
-├── package.json       # Node.js dependencies and scripts
-├── tsconfig.json      # TypeScript configuration
-├── src/
-│   └── index.ts       # Main MCP server entry point
-└── dist/              # Compiled JavaScript output (gitignored)
-```
-
-## MCP Tools
-
-The server exposes these tools:
-
-1. **list_notes** - List notes, optionally filtered by folder. Returns note names and folders.
-2. **get_note_content** - Get the content of a specific note by name (and optional folder).
-3. **add_note** - Create a new note with a name, content, and optional folder.
-4. **update_note_content** - Update the content of an existing note.
-
-## Development Commands
-
-- `npm install` - Install dependencies
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm run dev` - Run in development mode with ts-node
-- `npm start` - Run compiled server
-
-## Build & Run
-
-```bash
-npm install
-npm run build
-node dist/index.js
+src/
+├── index.ts              # Entry point — starts the MCP server
+├── server.ts             # Tool registration and MCP server setup
+├── tools/
+│   ├── notes.ts          # Note CRUD: list, get, create, update, delete
+│   ├── folders.ts        # Folder tools: list, create
+│   ├── accounts.ts       # Account listing
+│   └── search.ts         # Search notes
+├── applescript/
+│   ├── runner.ts         # osascript execution layer (exec wrapper)
+│   └── scripts/
+│       ├── notes.ts      # AppleScript templates for note operations
+│       ├── folders.ts    # AppleScript templates for folder operations
+│       └── search.ts     # AppleScript templates for search
+└── utils/
+    ├── html-to-text.ts   # Strip Notes HTML to plain text
+    └── parse.ts          # Parse AppleScript output → typed objects
 ```
 
-## Claude Desktop Configuration
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "apple-notes": {
-      "command": "node",
-      "args": ["/path/to/Apple-Notes-MCP/dist/index.js"]
-    }
-  }
-}
+## Data Model
+Apple Notes hierarchy:
+```
+Account ("iCloud", "On My Mac")
+  └── Folder
+        └── Note
+              ├── id (unique, stable)
+              ├── name (title)
+              ├── body (HTML)
+              ├── creation date
+              ├── modification date
+              └── password protected (bool)
 ```
 
-## Key Design Decisions
+## Implementation Phases
+1. **Phase 1 (Core):** `list_notes`, `get_note`, `create_note`, `update_note`, `delete_note`
+2. **Phase 2 (Organization):** `list_folders`, `create_folder`, `move_note`, `search_notes`
+3. **Phase 3 (Accounts & Metadata):** `list_accounts`, `export_note`
+4. **Phase 4 (Polish):** `append_to_note`, `duplicate_note`, HTML→Markdown conversion
 
-- AppleScript is executed via `osascript -e` using `child_process.execFile` for safety (no shell interpolation).
-- Note content is retrieved as plain text (not HTML/rich text) for simplicity.
-- Folder defaults to "Notes" when not specified.
-- Error handling wraps all AppleScript calls and returns descriptive MCP errors.
+## Commands
+- `npm install` — install dependencies
+- `npm run build` — compile TypeScript to dist/
+- `npm run dev` — run with ts-node for development
+- `npm start` — run compiled JS from dist/
 
-## Testing
+## Key Conventions
+- All AppleScript templates live in `src/applescript/scripts/` as template string functions
+- The runner (`src/applescript/runner.ts`) handles exec, error parsing, and timeout
+- Tool handlers in `src/tools/` should be thin: validate input → call AppleScript → parse output → return
+- AppleScript output uses `|||` as a field delimiter and `---` as a record delimiter
+- Dates from AppleScript are parsed to ISO 8601 in the parse utilities
+- Errors from osascript (permission denied, note not found) should be caught and returned as structured MCP errors, not thrown
 
-- macOS only (requires Apple Notes app)
-- Test manually by running the server and connecting via Claude Desktop or MCP Inspector
+## Known Limitations
+- Tags are not exposed in the macOS AppleScript dictionary
+- Pinning notes requires UI scripting (not implemented)
+- Rich text, tables, and drawings are not representable — only text content is accessible
+- Large note libraries can be slow due to `every note` iteration
+- User must grant Automation permission to the terminal/Node app for Notes access

@@ -1,19 +1,20 @@
-# Apple-Notes-MCP
+# Apple Notes MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that provides read and write access to Apple Notes on macOS.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets Claude interact with Apple Notes on macOS. Since Apple Notes has no REST API, this server uses AppleScript (via `osascript`) to automate Notes.app.
 
 ## Features
 
-- **List notes** — Browse all notes or filter by folder
-- **Read notes** — Get the content of any note by name
-- **Create notes** — Add new notes to any folder
-- **Update notes** — Modify the content of existing notes
+- **Notes:** List, read, create, update, and delete notes
+- **Folders:** List and create folders
+- **Search:** Full-text search across all notes
+- **Accounts:** List available accounts (iCloud, On My Mac, etc.)
+- **Move:** Move notes between folders
 
-## Requirements
+## Prerequisites
 
-- macOS (uses AppleScript to communicate with Apple Notes)
-- Node.js >= 18
-- Apple Notes app
+- macOS (Apple Notes is macOS-only)
+- Node.js 18+
+- Apple Notes.app
 
 ## Installation
 
@@ -24,48 +25,67 @@ npm install
 npm run build
 ```
 
+## macOS Permissions
+
+The first time you run the server, macOS will prompt you to grant Automation access. You can also configure this manually:
+
+1. Open **System Settings → Privacy & Security → Automation**
+2. Find your terminal app (Terminal, iTerm2, VS Code, etc.)
+3. Enable the toggle for **Notes**
+
+If you see `Not authorized to send Apple events` errors, this permission hasn't been granted.
+
 ## Usage with Claude Desktop
 
-Add the following to your Claude Desktop configuration file at `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "apple-notes": {
       "command": "node",
-      "args": ["/absolute/path/to/Apple-Notes-MCP/dist/index.js"]
+      "args": ["<path-to-repo>/dist/index.js"]
     }
   }
 }
 ```
 
-Restart Claude Desktop and you'll be able to interact with your Apple Notes.
+## Usage with Claude Code
+
+```bash
+claude mcp add apple-notes node <path-to-repo>/dist/index.js
+```
 
 ## Available Tools
 
 | Tool | Description |
 |------|-------------|
-| `list_notes` | List notes with optional folder filter and limit |
-| `get_note_content` | Retrieve the content of a specific note |
-| `add_note` | Create a new note in a specified folder |
-| `update_note_content` | Update an existing note's content |
+| `list_notes` | List notes, optionally filtered by folder/account |
+| `get_note` | Get the full content of a note by ID |
+| `create_note` | Create a new note in a specified folder |
+| `update_note` | Update the title or body of an existing note |
+| `delete_note` | Permanently delete a note |
+| `list_folders` | List all folders, optionally filtered by account |
+| `create_folder` | Create a new folder |
+| `move_note` | Move a note to a different folder |
+| `search_notes` | Search notes by text content |
+| `list_accounts` | List all available Notes accounts |
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run in dev mode
-npm run dev
+npm run dev    # Run with ts-node
+npm run build  # Compile TypeScript
+npm start      # Run compiled output
 ```
 
-## How It Works
+## Known Limitations
 
-This server uses AppleScript (via `osascript`) to communicate with the Apple Notes application. Each MCP tool maps to an AppleScript command that reads from or writes to your notes.
+- **Tags** are not exposed in the macOS AppleScript dictionary
+- **Pinned notes** cannot be pinned/unpinned programmatically
+- **Rich text, tables, and drawings** are not accessible — only text content
+- **Large note libraries** may be slow due to AppleScript iteration
+- **Password-protected notes** cannot be read or modified
 
 ## License
 
